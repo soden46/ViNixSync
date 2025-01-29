@@ -1,6 +1,6 @@
 # ViNixSync - The Next-Gen Blockchain (Conceptual)
 
-![ViNixSync Logo](logo.png)
+![ViNixSync Logo](https://raw.githubusercontent.com/soden46/ViNixSync/refs/heads/main/media/ViNixSync.webp)
 
 ## Overview (Conceptual) (Conceptual)
 ViNixSync is a next-generation blockchain platform that integrates high-speed transaction processing, AI-driven consensus mechanisms, and enhanced security through a hybrid PoW, PoH, and PoS consensus model. Inspired by the resilience of the phoenix and the precision of Virgo, ViNixSync offers a synchronized and scalable blockchain ecosystem.
