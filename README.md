@@ -75,16 +75,16 @@ Your input will help us make ViNix Sync even better!
 Support the development of ViNix Sync with your donations. Your support is crucial for the growth of the project. You can donate using the following methods:
 
 ### Ethereum (ETH)
-Send ETH to: (ethereum:0xde29f675bec2000d049092040c32497f646d9519) [0xde29f675bec2000d049092040c32497f646d9519](ethereum:0xde29f675bec2000d049092040c32497f646d9519)
+Send ETH to: 0xde29f675bec2000d049092040c32497f646d9519
 
 ### Solana (SOL)
-Send SOL to: (solana:99xoH3txDniVybDwoLNd46fQYtkU4n2RHBR9oRrQrAq2) [99xoH3txDniVybDwoLNd46fQYtkU4n2RHBR9oRrQrAq2](solana:99xoH3txDniVybDwoLNd46fQYtkU4n2RHBR9oRrQrAq2)
+Send SOL to: 99xoH3txDniVybDwoLNd46fQYtkU4n2RHBR9oRrQrAq2
 
 ### USDT (ERC-20)
-Send USDT to: (ethereum:0xde29f675bec2000d049092040c32497f646d9519)
+Send USDT to: 0xde29f675bec2000d049092040c32497f646d9519
 
 ### USDT (TRC-20)
-Send USDT to: (tron:TWpCekhmQmyTXtjtqM4zHMTSy7C7LjTS4f) [TWpCekhmQmyTXtjtqM4zHMTSy7C7LjTS4f](tron:TWpCekhmQmyTXtjtqM4zHMTSy7C7LjTS4f)
+Send USDT to: TWpCekhmQmyTXtjtqM4zHMTSy7C7LjTS4f
 
 ## Trade ViNixSync Token
 
