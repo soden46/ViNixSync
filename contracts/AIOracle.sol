@@ -67,7 +67,6 @@ contract AIOracle is AccessControl, Pausable {
         address best;
         uint256 highestScore = 0;
 
-        // Loop through the array of validators
         for (uint i = 0; i < validatorsList.length; i++) {
             address validator = validatorsList[i];
             uint256 score = validatorPerformance[validator];

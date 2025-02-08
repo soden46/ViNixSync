@@ -41,28 +41,20 @@ contract AIIntegration is ReentrancyGuard {
     }
 
     function executeConsensus() public onlyOwner {
-    aiOracle.bestValidator();
-    address bestValidator = aiOracle.bestValidator();
+        address bestValidator = aiOracle.bestValidator();
+        require(bestValidator != address(0), "No valid validator available");
 
-    uint256 transactionId = _chooseTransaction();
+        uint256 transactionId = _chooseTransaction();
+        HybridChain.Transaction memory transaction = hybridChain.getTransaction(transactionId);
 
-    // Dapatkan data transaksi dari HybridChain
-    HybridChain.Transaction memory transaction = hybridChain.getTransaction(transactionId);
+        // Validate transaction with AI Oracle
+        require(aiOracle.validateTransaction(transaction.sender, transaction.receiver, transaction.amount), "AI validation failed");
 
-    hybridChain.confirmTransaction(transactionId); // Validator konfirmasi transaksi
+        hybridChain.confirmTransaction(transactionId);
+        uint256 rewardAmount = _distributeRewards(bestValidator);
 
-    uint256 rewardAmount = _distributeRewards(bestValidator);
-
-    // Emit event dengan informasi lengkap
-    emit ConsensusExecuted(
-        bestValidator,
-        transactionId,
-        rewardAmount,
-        transaction.sender,
-        transaction.receiver,
-        transaction.amount
-    );
-}
+        emit ConsensusExecuted(bestValidator, transactionId, rewardAmount, transaction.sender, transaction.receiver, transaction.amount);
+    }
 
     function _chooseTransaction() internal view returns (uint256) {
         uint256 transactionsLength = hybridChain.getTransactionsLength();
@@ -94,7 +86,11 @@ contract AIIntegration is ReentrancyGuard {
         emit RewardPoolReplenished(_amount);
     }
 
-
+    function validateWithAI(address to, uint256 amount) public pure returns (bool) {
+        require(to != address(0), "Invalid address");
+        require(amount > 0, "Amount must be greater than 0");
+        return true;
+    }
     // Fungsi untuk menarik sisa dana di kontrak AIIntegration (gunakan dengan hati-hati)
     function withdrawRemainingBalance() public onlyOwner {
         payable(owner).transfer(address(this).balance);

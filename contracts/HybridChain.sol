@@ -76,7 +76,7 @@ contract HybridChain is ReentrancyGuard, Pausable, AccessControl {
     event BalanceUpdated(address indexed validator, uint256 newBalance);
 
     constructor(address _aiOracle, uint256 _baseTransactionFee, uint256 _minimumStake) {
-    require(_aiOracle != address(0), "Invalid AI Oracle address");
+        require(_aiOracle != address(0), "Invalid AI Oracle address");
     
         aiOracle = AIOracle(_aiOracle);
         baseTransactionFee = _baseTransactionFee;
@@ -87,8 +87,8 @@ contract HybridChain is ReentrancyGuard, Pausable, AccessControl {
         networkFeePercentage = 200;      // 2%
         aiProcessingFeePercentage = 100; // 1%
 
-        grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        grantRole(FEE_MANAGER_ROLE, msg.sender);
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(FEE_MANAGER_ROLE, msg.sender);
     }
 
     function getTransactionsLength() public view returns (uint256) {
@@ -139,22 +139,12 @@ contract HybridChain is ReentrancyGuard, Pausable, AccessControl {
         require(validators[msg.sender].isActive, "Validator not active");
 
         // AI Oracle validation check
-        require(aiOracle.validateTransaction(
-                transaction.sender,
-                transaction.receiver,
-                transaction.amount
-            ),
-            "AI Oracle rejected transaction"
-        );
+        require(aiOracle.validateTransaction(transaction.sender, transaction.receiver, transaction.amount), "AI Oracle rejected transaction");
 
-        // Update transaction status
         transaction.status = ValidationStatus.Confirmed;
         transaction.isConfirmed = true;
 
-        // Distribute fees
         _distributeTransactionFees(transaction);
-        
-        // Update validator metrics
         _updateValidatorMetrics(msg.sender, true);
 
         emit TransactionConfirmed(transactionId, msg.sender);

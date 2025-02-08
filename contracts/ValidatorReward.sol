@@ -157,14 +157,11 @@ contract ValidatorReward is ReentrancyGuard, Pausable, AccessControl {
     }
     
     function distributeRewards() external nonReentrant whenNotPaused onlyRole(DISTRIBUTOR_ROLE) {
-        require(
-            block.timestamp >= lastDistributionTime + rewardParams.distributionCooldown,
-            "Distribution cooldown not met"
-        );
-        
+        require(block.timestamp >= lastDistributionTime + rewardParams.distributionCooldown, "Distribution cooldown not met");
+
         address[] memory validators = hybridChain.getActiveValidators();
         require(validators.length > 0, "No active validators");
-        
+
         for (uint256 i = 0; i < validators.length; i++) {
             address validator = validators[i];
             try this.distributeValidatorReward(validator) {
@@ -173,7 +170,7 @@ contract ValidatorReward is ReentrancyGuard, Pausable, AccessControl {
                 emit DistributionFailed(validator, reason);
             }
         }
-        
+
         lastDistributionTime = block.timestamp;
     }
     
