@@ -7,51 +7,57 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
-/**
- * @title ValidatorReward
- * @dev Enhanced reward system for hybrid consensus validators incorporating AI metrics
- */
 contract ValidatorReward is ReentrancyGuard, Pausable, AccessControl {
+    error InvalidAddress();
+    error InvalidBaseReward();
+    error InvalidScore();
+    error CooldownNotMet();
+    error NoActiveValidators();
+    error ValidatorNotActive();
+    error ReputationTooLow();
+    error AIAccuracyTooLow();
+    error NoRewardsToClaim();
+    error TransferFailed();
+    error EmergencyConditionsNotMet();
+    error NoBalance();
+    
     bytes32 public constant DISTRIBUTOR_ROLE = keccak256("DISTRIBUTOR_ROLE");
     bytes32 public constant AI_ORACLE_ROLE = keccak256("AI_ORACLE_ROLE");
+    uint256 private constant PERCENTAGE_BASE = 100;
+    uint256 private constant MAX_SCORE = 100;
+    uint256 private constant REPUTATION_BASE = 10000;
+    uint256 private constant EMERGENCY_COOLDOWN = 7 days;
     
-    HybridChain public immutable hybridChain;
-    
-    // Enhanced reward configuration
     struct RewardParameters {
         uint256 baseRewardPerValidation;
         uint256 reputationMultiplier;
-        uint256 powBonusMultiplier;     // Bonus for PoW contribution
-        uint256 pohBonusMultiplier;     // Bonus for PoH performance
-        uint256 aiPerformanceMultiplier; // Bonus for AI validation accuracy
+        uint256 powBonusMultiplier;
+        uint256 pohBonusMultiplier;
+        uint256 aiPerformanceMultiplier;
         uint256 minimumReputationScore;
         uint256 minimumAIAccuracyScore;
         uint256 distributionCooldown;
     }
     
-    RewardParameters public rewardParams;
-    uint256 public lastDistributionTime;
-    
-    // Performance tracking
     struct ValidatorPerformance {
-        uint256 powHashrate;      // PoW contribution metric
-        uint256 pohLatency;       // PoH performance metric
-        uint256 aiAccuracyScore;  // AI validation accuracy
+        uint256 powHashrate;
+        uint256 pohLatency;
+        uint256 aiAccuracyScore;
         uint256 lastUpdateTime;
     }
     
-    // Enhanced reward tracking
+    HybridChain public immutable hybridChain;
+    
+    RewardParameters public rewardParams;
+    uint256 public lastDistributionTime;
+    uint256 public totalRewardsDistributedAllTime;
+    uint256 public totalValidationsRewarded;
+    
     mapping(address => uint256) public pendingRewards;
     mapping(address => uint256) public totalRewardsDistributed;
     mapping(address => uint256) public lastClaimTime;
     mapping(address => ValidatorPerformance) public validatorPerformance;
     
-    // Network statistics
-    uint256 public totalRewardsDistributedAllTime;
-    uint256 public totalValidationsRewarded;
-    uint256 public averageAIAccuracyScore;
-    
-    // Events
     event RewardDistributed(
         address indexed validator,
         uint256 amount,
@@ -67,7 +73,7 @@ contract ValidatorReward is ReentrancyGuard, Pausable, AccessControl {
     );
     event RewardParametersUpdated(RewardParameters params);
     event DistributionFailed(address indexed validator, string reason);
-    
+
     constructor(
         address _hybridChain,
         uint256 _baseRewardPerValidation,
@@ -79,14 +85,13 @@ contract ValidatorReward is ReentrancyGuard, Pausable, AccessControl {
         uint256 _minimumAIAccuracyScore,
         uint256 _distributionCooldown
     ) {
-        require(_hybridChain != address(0), "Invalid HybridChain address");
-        require(_baseRewardPerValidation > 0, "Invalid base reward");
-        require(_minimumReputationScore <= 100, "Invalid reputation score");
-        require(_minimumAIAccuracyScore <= 100, "Invalid AI accuracy score");
+        if (_hybridChain == address(0)) revert InvalidAddress();
+        if (_baseRewardPerValidation == 0) revert InvalidBaseReward();
+        if (_minimumReputationScore > MAX_SCORE) revert InvalidScore();
+        if (_minimumAIAccuracyScore > MAX_SCORE) revert InvalidScore();
         
         hybridChain = HybridChain(payable(_hybridChain));
         
-        // Initialize reward parameters
         rewardParams = RewardParameters({
             baseRewardPerValidation: _baseRewardPerValidation,
             reputationMultiplier: _reputationMultiplier,
@@ -109,8 +114,8 @@ contract ValidatorReward is ReentrancyGuard, Pausable, AccessControl {
         uint256 pohLatency,
         uint256 aiAccuracyScore
     ) external onlyRole(AI_ORACLE_ROLE) {
-        require(validator != address(0), "Invalid validator address");
-        require(aiAccuracyScore <= 100, "Invalid AI accuracy score");
+        if (validator == address(0)) revert InvalidAddress();
+        if (aiAccuracyScore > MAX_SCORE) revert InvalidScore();
         
         ValidatorPerformance storage performance = validatorPerformance[validator];
         performance.powHashrate = powHashrate;
@@ -128,47 +133,44 @@ contract ValidatorReward is ReentrancyGuard, Pausable, AccessControl {
         ValidatorPerformance memory performance = validatorPerformance[validator];
         HybridChain.Validator memory validatorData = hybridChain.getValidatorData(validator);
         
-        require(validatorData.isActive, "Validator not active");
-        require(validatorData.reputationScore >= rewardParams.minimumReputationScore, "Reputation too low");
-        require(performance.aiAccuracyScore >= rewardParams.minimumAIAccuracyScore, "AI accuracy too low");
+        if (!validatorData.isActive) revert ValidatorNotActive();
+        if (validatorData.reputationScore < rewardParams.minimumReputationScore) revert ReputationTooLow();
+        if (performance.aiAccuracyScore < rewardParams.minimumAIAccuracyScore) revert AIAccuracyTooLow();
         
-        // Calculate base reward
-        uint256 reward = validationCount * rewardParams.baseRewardPerValidation;
-        
-        // Apply reputation multiplier
-        reward = reward * validatorData.reputationScore * rewardParams.reputationMultiplier / 10000;
-        
-        // Apply PoW bonus
-        if (performance.powHashrate > 0) {
-            reward = reward * (100 + rewardParams.powBonusMultiplier) / 100;
+        uint256 reward;
+        unchecked {
+            reward = validationCount * rewardParams.baseRewardPerValidation;
+            
+            reward = reward * validatorData.reputationScore * rewardParams.reputationMultiplier / REPUTATION_BASE;
+            
+            if (performance.powHashrate > 0) {
+                reward = reward * (PERCENTAGE_BASE + rewardParams.powBonusMultiplier) / PERCENTAGE_BASE;
+            }
+            
+            if (performance.pohLatency > 0) {
+                uint256 pohBonus = (1000 / performance.pohLatency) * rewardParams.pohBonusMultiplier;
+                reward = reward * (PERCENTAGE_BASE + pohBonus) / PERCENTAGE_BASE;
+            }
+            
+            uint256 aiBonus = performance.aiAccuracyScore * rewardParams.aiPerformanceMultiplier / PERCENTAGE_BASE;
+            reward = reward * (PERCENTAGE_BASE + aiBonus) / PERCENTAGE_BASE;
         }
-        
-        // Apply PoH bonus (lower latency = higher bonus)
-        if (performance.pohLatency > 0) {
-            uint256 pohBonus = (1000 / performance.pohLatency) * rewardParams.pohBonusMultiplier;
-            reward = reward * (100 + pohBonus) / 100;
-        }
-        
-        // Apply AI performance bonus
-        uint256 aiBonus = performance.aiAccuracyScore * rewardParams.aiPerformanceMultiplier / 100;
-        reward = reward * (100 + aiBonus) / 100;
         
         return reward;
     }
     
     function distributeRewards() external nonReentrant whenNotPaused onlyRole(DISTRIBUTOR_ROLE) {
-        require(block.timestamp >= lastDistributionTime + rewardParams.distributionCooldown, "Distribution cooldown not met");
+        if (block.timestamp < lastDistributionTime + rewardParams.distributionCooldown) revert CooldownNotMet();
 
         address[] memory validators = hybridChain.getActiveValidators();
-        require(validators.length > 0, "No active validators");
+        if (validators.length == 0) revert NoActiveValidators();
 
-        for (uint256 i = 0; i < validators.length; i++) {
-            address validator = validators[i];
-            try this.distributeValidatorReward(validator) {
-                // Reward distributed successfully
+        for (uint256 i; i < validators.length;) {
+            try this.distributeValidatorReward(validators[i]) {
             } catch Error(string memory reason) {
-                emit DistributionFailed(validator, reason);
+                emit DistributionFailed(validators[i], reason);
             }
+            unchecked { ++i; }
         }
 
         lastDistributionTime = block.timestamp;
@@ -179,8 +181,10 @@ contract ValidatorReward is ReentrancyGuard, Pausable, AccessControl {
         uint256 reward = calculateReward(validator, validatorData.totalValidated);
         
         if (reward > 0) {
-            pendingRewards[validator] += reward;
-            totalValidationsRewarded += validatorData.totalValidated;
+            unchecked {
+                pendingRewards[validator] += reward;
+                totalValidationsRewarded += validatorData.totalValidated;
+            }
             
             emit RewardDistributed(
                 validator,
@@ -193,15 +197,17 @@ contract ValidatorReward is ReentrancyGuard, Pausable, AccessControl {
     
     function claimRewards() external nonReentrant whenNotPaused {
         uint256 reward = pendingRewards[msg.sender];
-        require(reward > 0, "No rewards to claim");
+        if (reward == 0) revert NoRewardsToClaim();
         
         pendingRewards[msg.sender] = 0;
-        totalRewardsDistributed[msg.sender] += reward;
-        totalRewardsDistributedAllTime += reward;
+        unchecked {
+            totalRewardsDistributed[msg.sender] += reward;
+            totalRewardsDistributedAllTime += reward;
+        }
         lastClaimTime[msg.sender] = block.timestamp;
         
         (bool success, ) = msg.sender.call{value: reward}("");
-        require(success, "Reward transfer failed");
+        if (!success) revert TransferFailed();
         
         emit RewardsClaimed(msg.sender, reward);
     }
@@ -216,9 +222,9 @@ contract ValidatorReward is ReentrancyGuard, Pausable, AccessControl {
         uint256 _minimumAIAccuracyScore,
         uint256 _distributionCooldown
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(_baseRewardPerValidation > 0, "Invalid base reward");
-        require(_minimumReputationScore <= 100, "Invalid reputation score");
-        require(_minimumAIAccuracyScore <= 100, "Invalid AI accuracy score");
+        if (_baseRewardPerValidation == 0) revert InvalidBaseReward();
+        if (_minimumReputationScore > MAX_SCORE) revert InvalidScore();
+        if (_minimumAIAccuracyScore > MAX_SCORE) revert InvalidScore();
         
         rewardParams = RewardParameters({
             baseRewardPerValidation: _baseRewardPerValidation,
@@ -234,36 +240,15 @@ contract ValidatorReward is ReentrancyGuard, Pausable, AccessControl {
         emit RewardParametersUpdated(rewardParams);
     }
     
-    function pause() external onlyRole(DEFAULT_ADMIN_ROLE) {
-        _pause();
-    }
-    
-    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
-        _unpause();
-    }
-    
-    function getValidatorStats(address validator) external view returns (
-        uint256 pendingReward,
-        uint256 totalRewarded,
-        uint256 lastClaim,
-        ValidatorPerformance memory performance
-    ) {
-        return (
-            pendingRewards[validator],
-            totalRewardsDistributed[validator],
-            lastClaimTime[validator],
-            validatorPerformance[validator]
-        );
-    }
-    
     function emergencyWithdraw() external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(paused(), "Contract must be paused");
-        require(block.timestamp > lastDistributionTime + 7 days, "Cooldown period not met");
+        if (!paused()) revert EmergencyConditionsNotMet();
+        if (block.timestamp <= lastDistributionTime + EMERGENCY_COOLDOWN) revert CooldownNotMet();
         
         uint256 balance = address(this).balance;
-        require(balance > 0, "No balance to withdraw");
+        if (balance == 0) revert NoBalance();
         
-        payable(msg.sender).transfer(balance);
+        (bool success, ) = msg.sender.call{value: balance}("");
+        if (!success) revert TransferFailed();
     }
     
     receive() external payable {}

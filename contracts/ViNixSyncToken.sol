@@ -7,37 +7,71 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "./AIIntegration.sol";
 
 contract ViNixSyncToken is ERC20, Ownable, Pausable {
-    AIIntegration public aiIntegration;
-
-    constructor(address _aiIntegration) ERC20("ViNixSyncToken", "VINIX") Ownable(msg.sender) {
+    AIIntegration public immutable aiIntegration;
+    uint256 private immutable _maxSupply;
+    uint8 private _status;
+    
+    // Metadata yang disimpan off-chain
+    string public constant METADATA_URI = "ipfs://QmYourIPFSHash/metadata.json";
+    
+    event ValidationFailed(address indexed user);
+    
+    constructor(address _aiIntegration) 
+        ERC20("ViNixSyncToken", "VINIX")
+        Ownable(msg.sender) 
+    {
         aiIntegration = AIIntegration(_aiIntegration);
-        _mint(msg.sender, 1_000_000_000 * 10 ** decimals());
+        _maxSupply = 1_000_000_000 * 10 ** 18;
+        _mint(msg.sender, _maxSupply);
     }
-
-    function mint(address to, uint256 amount) public onlyOwner whenNotPaused {
-        require(aiIntegration.validateWithAI(to, amount), "AI validation failed");
+    
+    modifier validateAI(address from, uint256 amount) {
+        if(!aiIntegration.validateWithAI(from, amount)) {
+            emit ValidationFailed(from);
+            revert("AI:fail");
+        }
+        _;
+    }
+    
+    function transfer(address to, uint256 amount) 
+        public 
+        override 
+        validateAI(msg.sender, amount) 
+        returns (bool) 
+    {
+        if(_status == 1) revert("P");
+        return super.transfer(to, amount);
+    }
+    
+    function transferFrom(address from, address to, uint256 amount)
+        public
+        override
+        validateAI(from, amount)
+        returns (bool)
+    {
+        if(_status == 1) revert("P");
+        return super.transferFrom(from, to, amount);
+    }
+    
+    function mint(address to, uint256 amount) 
+        external 
+        onlyOwner 
+        validateAI(to, amount) 
+    {
+        if(_status == 1) revert("P");
+        if(totalSupply() + amount > _maxSupply) revert("Max");
         _mint(to, amount);
     }
-
-    function burn(uint256 amount) public {
+    
+    function burn(uint256 amount) external {
         _burn(msg.sender, amount);
     }
-
-    function transfer(address recipient, uint256 amount) public override whenNotPaused returns (bool) {
-        require(aiIntegration.validateWithAI(msg.sender, amount), "AI validation failed");
-        return super.transfer(recipient, amount);
+    
+    function pause() external onlyOwner {
+        _status = 1;
     }
-
-    function transferFrom(address sender, address recipient, uint256 amount) public override whenNotPaused returns (bool) {
-        require(aiIntegration.validateWithAI(sender, amount), "AI validation failed");
-        return super.transferFrom(sender, recipient, amount);
-    }
-
-    function pause() public onlyOwner {
-        _pause();
-    }
-
-    function unpause() public onlyOwner {
-        _unpause();
+    
+    function unpause() external onlyOwner {
+        _status = 0;
     }
 }
